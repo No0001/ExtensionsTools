@@ -1,0 +1,160 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+
+namespace 
+{
+    public class ChunkedList<T> : IEnumerable<T>, IDisposable
+    {
+        private const int DEFAULT_CHUNK_SIZE = 100000;
+
+        private readonly int _chunkSize;
+        public readonly IList<T[]> items;
+        private readonly bool _isDisposable;
+        public int Count { get; private set; }
+
+
+        public ChunkedList() : this(DEFAULT_CHUNK_SIZE) { }
+
+        public ChunkedList(int chunkSize)
+        {
+            this._chunkSize = chunkSize;
+            this.items = new List<T[]>();
+            this._isDisposable = typeof(IDisposable).IsAssignableFrom(typeof(T));
+        }
+
+        public void Dispose()
+        {
+            this.Clear();
+        }
+
+        public T this[int index]
+        {
+            get
+            {
+                if (index < 0 || index >= this.Count)
+                {
+                    throw new IndexOutOfRangeException();
+                }
+
+                int nChunk = index / this._chunkSize;
+                int nChunkIndex = index % this._chunkSize;
+
+                return this.items[nChunk][nChunkIndex];
+            }
+            set
+            {
+                if (index < 0 || index >= this.Count)
+                {
+                    throw new IndexOutOfRangeException();
+                }
+
+                int nChunk = index / this._chunkSize;
+                int nChunkIndex = index % this._chunkSize;
+
+                T oldItem = this.items[nChunk][nChunkIndex];
+                this.items[nChunk][nChunkIndex] = value;
+
+                if (this._isDisposable)
+                {
+                    (oldItem as IDisposable).Dispose();
+                }
+            }
+        }
+
+        public void Add(T item)
+        {
+            int nChunk = this.Count / this._chunkSize;
+
+            int nChunkIndex = this.Count % this._chunkSize;
+            if (nChunkIndex == 0)
+            {
+                this.items.Add(new T[this._chunkSize]);
+            }
+
+            this.items[nChunk][nChunkIndex] = item;
+            this.Count++;
+        }
+
+        public void AddRange(IEnumerable<T> items)
+        {
+            if (items == null)
+            {
+                throw new ArgumentNullException("items");
+            }
+
+            foreach (T item in items)
+            {
+                this.Add(item);
+            }
+        }
+
+        public void Clear()
+        {
+            if (this._isDisposable)
+            {
+                foreach (T[] array in this.items)
+                {
+                    foreach (T t in array)
+                    {
+                        (t as IDisposable).Dispose();
+                    }
+                }
+            }
+
+            this.items.Clear();
+            this.Count = 0;
+        }
+
+        public bool Contains(T item)
+        {
+            foreach (T[] array in this.items)
+            {
+                foreach (T t in array)
+                {
+                    if (item.Equals(t))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        public IEnumerator<T> GetEnumerator()
+        {
+            foreach (T[] array in this.items)
+            {
+                foreach (T t in array)
+                {
+                    yield return t;
+                }
+            }
+        }
+
+        IEnumerator IEnumerable.GetEnumerator()
+        {
+            return this.GetEnumerator();
+        }
+
+        public int IndexOf(T item)
+        {
+            for (int i = 0; i < this.items.Count; ++i)
+            {
+                for (int j = 0; j < this.items[i].Length; ++j)
+                {
+                    if (item.Equals(this.items[i][j]))
+                    {
+                        return ((i * this._chunkSize) + j);
+                    }
+                }
+            }
+
+            return -1;
+        }
+    }
+}
